@@ -1,0 +1,4 @@
+harp
+sentinelsat
+json-c
+gdal

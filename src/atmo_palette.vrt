@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VRTDataset rasterXSize="280" rasterYSize="240">
+  <SRS>GEOGCS["WGS 84",DATUM["WGS_1984",SPHEROID["WGS 84",6378137,298.257223563,AUTHORITY["EPSG","7030"]],AUTHORITY["EPSG","6326"]],PRIMEM["Greenwich",0],UNIT["degree",0.0174532925199433],AUTHORITY["EPSG","4326"]]</SRS>
+  <GeoTransform>-57,  0.025,  0,  7,  0, -0.025</GeoTransform>
+  <VRTRasterBand dataType="Byte" band="1">
+    <ColorInterp>Palette</ColorInterp>
+    <SimpleSource>
+      <SourceFilename relativeToVRT="1">data/tmp/atmo_categories.tif</SourceFilename>
+      <SourceBand>1</SourceBand>
+      <SourceProperties RasterXSize="280" RasterYSize="240" DataType="Byte" BlockXSize="280" BlockYSize="29" />
+      <SrcRect xOff="0" yOff="0" xSize="280" ySize="240" />
+      <DstRect xOff="0" yOff="0" xSize="280" ySize="240" />
+    </SimpleSource>
+    <ColorTable>
+      <Entry c1="0" c2="255" c3="255" c4="0"/>
+      <Entry c1="84" c2="195" c3="114" c4="255"/>
+      <Entry c1="255" c2="255" c3="0" c4="255"/>
+      <Entry c1="234" c2="67" c3="53" c4="255"/>
+      <Entry c1="152" c2="0" c3="0" c4="255"/>
+      <Entry c1="103" c2="78" c3="167" c4="255"/>
+    </ColorTable>
+    <CategoryNames>
+      <Category>Aucune</Category>
+      <Category>Faible</Category>
+      <Category>Moyenne</Category>
+      <Category>Haute</Category>
+      <Category>Très haute</Category>
+      <Category>Critique</Category>
+    </CategoryNames>
+    <Metadata>
+      <MDI key="title">Niveau d'alerte atmosphérique (source Sentinel 5P, série aerosol_index_354_388)</MDI>
+    </Metadata>
+  </VRTRasterBand>
+</VRTDataset>

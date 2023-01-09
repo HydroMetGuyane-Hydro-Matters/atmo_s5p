@@ -2,3 +2,8 @@ harp
 sentinelsat
 json-c
 gdal
+rasterio
+pandas
+numpy
+jinja2
+click

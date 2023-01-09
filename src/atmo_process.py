@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import click
-# import json
+from jinja2 import Template
 import logging
 import numpy as np
 import pandas as pd
@@ -40,19 +40,29 @@ sentinel_config = {
 @click.command()
 @click.option('--footprint', default='./Guyane_watersheds.geojson', help='path to geojson file defining the footprint to retrieve')
 @click.option('--storage_path', default='../data', help='path to store the data')
+@click.option('--date_start', default='NOW-1DAY/DAY', help='Start date for the sentinel5 api call (see https://sentinelsat.readthedocs.io/en/stable/api_overview.html)')
+@click.option('--date_end', default='NOW/DAY', help='End date for the sentinel5 api call')
+@click.option('--vrt_template', default='templates/atmo_palette.j2', help='Template file to use to generate the VRT file, sued for the production of the final paletted geotiff')
 @click.option('--generate_styled_geotiff', default=True, type=bool, help='Generate a geotiff styled file(3bit data with integrated colormap)')
 @click.option('--generate_styled_png', default=True, type=bool, help='Generate a png styled file')
 # Options can also be set using env vars, prefixed by ATMO_, e.g. ATMO_STORAGE_PATH
 def atmo_5sp(footprint,
              storage_path,
+             date_start,
+             date_end,
+             vrt_template,
              generate_styled_geotiff,
              generate_styled_png,
              ):
+    # Converting storage_path to absolute path
+    storage_path = os.path.abspath(storage_path)
 
     logging.info(f'Storing data into {storage_path}')
     # Generate subfolders for storage if necessary. Need to use bash for this syntax
     os.system(f'/bin/bash -c "mkdir -p {storage_path}/{{nc,raw,styled,tmp}}"')
 
+    sentinel_config['start_date'] = date_start
+    sentinel_config['end_date'] = date_end
     api = SentinelAPI(sentinel_config['user'], sentinel_config['password'], sentinel_config['uri'])
     # footprint = geojson_to_wkt(json.loads(watersheds))
     footprint = geojson_to_wkt(read_geojson(footprint))
@@ -61,67 +71,81 @@ def atmo_5sp(footprint,
                          producttype=sentinel_config['producttype'],
                          platformname=sentinel_config['platformname'])
     downloaded_products = api.download_all(products, directory_path=f'{storage_path}/nc')
-    products_date = list(products.items())[0][1]['endposition']
 
     # list_files = glob.glob('./tmp/*.nc')
     # print(list_files)
     # for filename in list_files:
+    # Get a list of processed dates (we should treat each day separately)
+    days_list=set()
     for file in downloaded_products[0].values():
-        filename = file["path"]
-        logging.debug(f'Processing file {filename}')
-        # Convert the original netcdf files to more "raster-like" files using HARP tool
-        cmd = f"harpconvert -a 'keep(latitude_bounds,longitude_bounds,absorbing_aerosol_index);bin_spatial(241,1,0.025,281,-57,0.025);squash(time, (latitude_bounds,longitude_bounds));derive(latitude {{latitude}});derive(longitude {{longitude}});exclude(latitude_bounds,longitude_bounds,count,weight)' {filename} {storage_path}/tmp/{os.path.splitext(os.path.basename(filename))[0]}_converted.nc"
-        logging.debug(f'Running shell command `{cmd}`')
-        os.system(cmd)
+        days_list.add(file['date'].strftime("%Y%m%d"))
+    for d in sorted(days_list):
+        for file in downloaded_products[0].values():
+            if file['date'].strftime("%Y%m%d") == d:
+                filename = file["path"]
+                logging.debug(f'Processing file {filename}')
+                # Convert the original netcdf files to more "raster-like" files using HARP tool
+                cmd = f"harpconvert -a 'keep(latitude_bounds,longitude_bounds,absorbing_aerosol_index);bin_spatial(241,1,0.025,281,-57,0.025);squash(time, (latitude_bounds,longitude_bounds));derive(latitude {{latitude}});derive(longitude {{longitude}});exclude(latitude_bounds,longitude_bounds,count,weight)' {filename} {storage_path}/tmp/{os.path.splitext(os.path.basename(filename))[0]}_converted.nc"
+                logging.debug(f'Running shell command `{cmd}`')
+                os.system(cmd)
 
-    # Merge the netcdf files
-    # Following line does not work, might be possible to fix
-    # os.system("harpconvert -a 'keep(latitude_bounds,longitude_bounds,absorbing_aerosol_index);bin_spatial(241,1,0.025,281,-57,0.025);squash(time, (latitude_bounds,longitude_bounds));derive(latitude {latitude});derive(longitude {longitude});exclude(latitude_bounds,longitude_bounds,count,weight)'
-    merged_aai_filename = f'{storage_path}/raw/{products_date.strftime("%Y%m%d")}_merged_aai.tif'
-    logging.info(f'Merging data into geotiff file {merged_aai_filename}')
-    os.system(f'gdal_merge.py -o {merged_aai_filename}  {storage_path}/tmp/*_converted.nc')
+        # Merge the netcdf files
+        # Following line does not work, might be possible to fix
+        # os.system("harpconvert -a 'keep(latitude_bounds,longitude_bounds,absorbing_aerosol_index);bin_spatial(241,1,0.025,281,-57,0.025);squash(time, (latitude_bounds,longitude_bounds));derive(latitude {latitude});derive(longitude {longitude});exclude(latitude_bounds,longitude_bounds,count,weight)'
+        merged_aai_filename = f'{storage_path}/raw/{d}_merged_aai.tif'
+        logging.info(f'Merging data into geotiff file {merged_aai_filename}')
+        os.system(f'gdal_merge.py -o {merged_aai_filename}  {storage_path}/tmp/*_converted.nc')
 
-    logging.info(f'Converting raw Float32 values into categories of atmospheric alerts')
-    with rasterio.open(f'{storage_path}/raw/{products_date.strftime("%Y%m%d")}_merged_aai.tif') as input:
-        band1 = input.read(1)
+        logging.info(f'Converting raw Float32 values into categories of atmospheric alerts')
+        with rasterio.open(f'{storage_path}/raw/{d}_merged_aai.tif') as input:
+            band1 = input.read(1)
 
-        # Flatten to feed 1-dim data into pd.cut
-        b = band1.ravel()
-        ai_c = pd.cut(
-            x=b,
-            bins=[-np.inf, 0.4, 0.6, 0.9, 1.2, 1.5, np.inf],
-            labels=["good", "feeble", "medium", "high", "vhigh", "critical"],
-        )
+            # Flatten to feed 1-dim data into pd.cut
+            b = band1.ravel()
+            ai_c = pd.cut(
+                x=b,
+                bins=[-np.inf, 0.4, 0.6, 0.9, 1.2, 1.5, np.inf],
+                labels=["good", "feeble", "medium", "high", "vhigh", "critical"],
+            )
 
-        # Unflatten to get back our 2D array
-        classified_data = np.reshape(ai_c.codes, (input.height, input.width))
-        with rasterio.open(
-            f'{storage_path}/tmp/atmo_categories.tif',
-            'w',
-            driver='GTiff',
-            height=classified_data.shape[0],
-            width=classified_data.shape[1],
-            count=1,
-            dtype=np.int8,
-            crs='+proj=latlong',
-            transform=input.transform,
-        ) as dst:
-            dst.write(classified_data, 1)
+            # Unflatten to get back our 2D array
+            classified_data = np.reshape(ai_c.codes, (input.height, input.width))
+            with rasterio.open(
+                f'{storage_path}/tmp/atmo_categories.tif',
+                'w',
+                driver='GTiff',
+                height=classified_data.shape[0],
+                width=classified_data.shape[1],
+                count=1,
+                dtype=np.int8,
+                crs='+proj=latlong',
+                transform=input.transform,
+            ) as dst:
+                dst.write(classified_data, 1)
 
-    logging.info(f'Optimizing and styling the data:')
-    styled_aai_filename = f'{storage_path}/styled/{products_date.strftime("%Y%m%d")}_aai'
-    if generate_styled_geotiff:
-        logging.info(f'    Generating geotiff 3bit data with integrated colormap: {styled_aai_filename}.tif')
-        # os.system('gdal_translate -co COMPRESS=LZW -co NBITS=3 -co ALPHA=YES atmo_palette.vrt {styled_aai_filename}.tif')
-        os.system(f'gdal_translate -co COMPRESS=LZW -co NBITS=3 -co ALPHA=YES atmo_palette.vrt {styled_aai_filename}.tif')
-    # We may have to use the PNG export, because geotiff when using a palette don't support alpha channel
-    # (https://gdal.org/drivers/raster/gtiff.html#creation-issues)
-    if generate_styled_png:
-        logging.info(f'    Generating png file: {styled_aai_filename}.png')
-        os.system(f'gdal_translate -of PNG -co WORLDFILE=YES atmo_palette.vrt {styled_aai_filename}.png')
+        logging.info(f'Optimizing and styling the data:')
 
-    logging.info(f'Removing temporary files')
-    os.system(f'rm {storage_path}/tmp/*')
+        logging.info(f'    Generating the VRT file')
+        # TODO: generate the VRT file using jinja template, to adjust the paths and palette
+        with open(vrt_template) as file_:
+            template = Template(file_.read())
+            vrt_xml = template.render(tif_file_path=f'{storage_path}/tmp/atmo_categories.tif')
+            with open(f'{storage_path}/tmp/atmo_categories.vrt', 'w') as f:
+                f.write(vrt_xml)
+
+        styled_aai_filename = f'{storage_path}/styled/{d}_aai'
+        if generate_styled_geotiff:
+            logging.info(f'    Generating geotiff 3bit data with integrated colormap: {styled_aai_filename}.tif')
+            # os.system('gdal_translate -co COMPRESS=LZW -co NBITS=3 -co ALPHA=YES atmo_palette.vrt {styled_aai_filename}.tif')
+            os.system(f'gdal_translate -co COMPRESS=LZW -co NBITS=3 -co ALPHA=YES {storage_path}/tmp/atmo_categories.vrt {styled_aai_filename}.tif')
+        # We may have to use the PNG export, because geotiff when using a palette don't support alpha channel
+        # (https://gdal.org/drivers/raster/gtiff.html#creation-issues)
+        if generate_styled_png:
+            logging.info(f'    Generating png file: {styled_aai_filename}.png')
+            os.system(f'gdal_translate -of PNG -co WORLDFILE=YES {storage_path}/tmp/atmo_categories.vrt {styled_aai_filename}.png')
+
+        logging.info(f'Removing temporary files')
+        os.system(f'rm {storage_path}/tmp/*')
 
 if __name__ == '__main__':
     atmo_5sp(auto_envvar_prefix='ATMO')

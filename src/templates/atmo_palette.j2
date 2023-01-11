@@ -12,20 +12,14 @@
       <DstRect xOff="0" yOff="0" xSize="280" ySize="240" />
     </SimpleSource>
     <ColorTable>
-      <Entry c1="0" c2="255" c3="255" c4="0"/>
-      <Entry c1="84" c2="195" c3="114" c4="255"/>
-      <Entry c1="255" c2="255" c3="0" c4="255"/>
-      <Entry c1="234" c2="67" c3="53" c4="255"/>
-      <Entry c1="152" c2="0" c3="0" c4="255"/>
-      <Entry c1="103" c2="78" c3="167" c4="255"/>
+      {%- for c in atmo_classes %}
+        <Entry c1="{{ c['rgba'][0] }}" c2="{{ c['rgba'][1] }}" c3="{{ c['rgba'][2] }}" c4="{{ c['rgba'][3] }}"/>
+      {%- endfor %}
     </ColorTable>
     <CategoryNames>
-      <Category>Aucune</Category>
-      <Category>Faible</Category>
-      <Category>Moyenne</Category>
-      <Category>Haute</Category>
-      <Category>Très haute</Category>
-      <Category>Critique</Category>
+      {%- for c in atmo_classes %}
+        <Category>{{ c['alert_label'] }}</Category>
+      {%- endfor %}
     </CategoryNames>
     <Metadata>
       <MDI key="title">Niveau d'alerte atmosphérique (source Sentinel 5P, série aerosol_index_354_388)</MDI>

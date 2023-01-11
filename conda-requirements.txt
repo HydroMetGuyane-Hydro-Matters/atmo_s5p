@@ -7,3 +7,4 @@ pandas
 numpy
 jinja2
 click
+cairosvg

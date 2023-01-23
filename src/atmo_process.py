@@ -189,14 +189,15 @@ def generate_classes_legend(atmo_classes, storage_path):
         if c['legend_label'] is None:
             c['legend_label'] = f"{c['bounds_min']} - {c['bounds_max']}"
         # escape the < and > characters
-        c['legend_label'] = escape(c['legend_label'])
+        # c['legend_label'] = escape(c['legend_label'])
     svg_tpl = """
         <svg xmlns="http://www.w3.org/2000/svg" width="450" height="300">
         <g transform="scale(3)">
           {%- for c in atmo_classes %}
             <rect x="5" y="{{ 5+15*(loop.index-1) }}" height="10" width="10" style="opacity:{{ c['rgba'][3]/255 }};fill:{{ c['color'] }}"/>
             <text x="20" y="{{ 13+15*(loop.index-1) }}" style="font-size:8px;">
-                {{ c['legend_label'] }}
+                {# Escape the labels, might contain < > chars #}
+                {{ c['legend_label'] | e }}
              (Alerte : {{ c['alert_label'] }})
             </text>
           {%- endfor %}

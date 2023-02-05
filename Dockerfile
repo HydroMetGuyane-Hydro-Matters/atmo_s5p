@@ -6,7 +6,6 @@ LABEL git-repo="https://github.com/HydroMetGuyane-Hydro-Matters/sagui_platform"
 
 COPY conda-requirements.txt conda-requirements.txt
 RUN conda install --file conda-requirements.txt
-#RUN conda install cairosvg
 
 COPY src/ app/
 ENV ATMO_STORAGE_PATH=/mnt/data \

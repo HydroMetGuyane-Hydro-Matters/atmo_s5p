@@ -119,7 +119,7 @@ def atmo_5sp(footprint,
         # os.system("harpconvert -a 'keep(latitude_bounds,longitude_bounds,absorbing_aerosol_index);bin_spatial(241,1,0.025,281,-57,0.025);squash(time, (latitude_bounds,longitude_bounds));derive(latitude {latitude});derive(longitude {longitude});exclude(latitude_bounds,longitude_bounds,count,weight)'
         merged_aai_filename = f'{storage_path}/raw/{d}_merged_aai.tif'
         logging.info(f'Merging data into geotiff file {merged_aai_filename}')
-        os.system(f'gdal_merge.py -o {merged_aai_filename}  {storage_path}/tmp/*_converted.nc')
+        os.system(f'gdal_merge.py -a_nodata -255 -o {merged_aai_filename}  {storage_path}/tmp/*_converted.nc')
 
         logging.info(f'Converting raw Float32 values into categories of atmospheric alerts')
         with rasterio.open(f'{storage_path}/raw/{d}_merged_aai.tif') as input:
@@ -152,7 +152,7 @@ def atmo_5sp(footprint,
         logging.info(f'Optimizing and styling the data:')
 
         logging.info(f'    Generating the VRT file')
-        # TODO: generate the VRT file using jinja template, to adjust the paths and palette
+        # generate the VRT file using jinja template, to adjust the paths and palette
         with open(vrt_template) as file_:
             template = Template(file_.read())
             vrt_xml = template.render(tif_file_path=f'{storage_path}/tmp/atmo_categories.tif', atmo_classes=atmo_classes)
@@ -171,7 +171,6 @@ def atmo_5sp(footprint,
             os.system(f'gdal_translate -of PNG -co WORLDFILE=YES {storage_path}/tmp/atmo_categories.vrt {styled_aai_filename}.png')
         if generate_legend:
             generate_classes_legend(atmo_classes, storage_path)
-
 
         logging.info(f'Removing temporary files')
         os.system(f'rm {storage_path}/tmp/*')
@@ -209,6 +208,7 @@ def generate_classes_legend(atmo_classes, storage_path):
 
     svg2png(bytestring=svg_code, write_to=f'{storage_path}/styled/legend.png')
     pass
+
 
 if __name__ == '__main__':
     atmo_5sp(auto_envvar_prefix='ATMO')
